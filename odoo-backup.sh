@@ -134,26 +134,33 @@ run_backup() {
   pyfile="$(mktemp /tmp/odoo_backup_XXXXXXXXXX.py)"
   trap 'rm -f "$pyfile"' EXIT
 
+  # Pre-quote variables for Python (bash 4.2+ compatible)
+  # Use printf %q and wrap in single quotes for Python string literals
+  local backup_file_q backup_format_q db_name_q
+  backup_file_q="'$(printf '%q' "$backup_file")'"
+  backup_format_q="'$(printf '%q' "$BACKUP_FORMAT")'"
+  db_name_q="'$(printf '%q' "$DB_NAME")'"
+
   cat > "$pyfile" <<PYEOF
 import sys, os
 
-backup_file   = ${backup_file@Q}
-backup_format = ${BACKUP_FORMAT@Q}
-db_name       = ${DB_NAME@Q}
+backup_file   = $backup_file_q
+backup_format = $backup_format_q
+db_name       = $db_name_q
 
-print(f"[PY]  Importing odoo.service.db ...")
+print("[PY]  Importing odoo.service.db ...")
 import odoo.service.db as db_svc
 
-print(f"[PY]  Starting backup: db={db_name}, format={backup_format}")
-print(f"[PY]  Target file: {backup_file}")
+print("[PY]  Starting backup: db=%s, format=%s" % (db_name, backup_format))
+print("[PY]  Target file: %s" % backup_file)
 
 try:
     with open(backup_file, "wb") as fh:
         db_svc.dump_db(db_name, fh, backup_format)
     size_mb = os.path.getsize(backup_file) / 1024 / 1024
-    print(f"[PY]  Backup complete. Size: {size_mb:.2f} MB")
+    print("[PY]  Backup complete. Size: %.2f MB" % size_mb)
 except Exception as exc:
-    print(f"[PY]  ERROR: {exc}", file=sys.stderr)
+    print("[PY]  ERROR: %s" % exc, file=sys.stderr)
     try:
         os.remove(backup_file)
     except OSError:
@@ -165,7 +172,7 @@ PYEOF
 
   "$ODOO_BIN" shell \
     --config="${ODOO_CONF}" \
-    --db_host=False \
+    --db_host= \
     --no-http \
     --database="${DB_NAME}" \
     < "$pyfile"
