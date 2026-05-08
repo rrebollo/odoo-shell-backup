@@ -6,6 +6,7 @@ set -euo pipefail
 REMOTE_CONF="${REMOTE_CONF:-/etc/odoo/odoo.conf}"
 BACKUP_FORMAT="${BACKUP_FORMAT:-zip}"
 LOCAL_DIR="$(pwd)"
+REMOTE_BACKUP_DIR="${REMOTE_BACKUP_DIR:-/opt/odoo-server/backups}"
 DRY_RUN=false
 VERBOSE=false
 SSH_USER_HOST=""
@@ -26,6 +27,7 @@ Arguments:
 Options:
   -h, --help          Show this help and exit
   -c, --conf PATH     Remote odoo.conf path (default: /etc/odoo/odoo.conf)
+  -r, --remote-dir    Remote backup directory (default: /opt/odoo-server/backups)
   -f, --format FMT    Backup format: zip|dump (default: zip)
   -d, --dry-run       Show what would happen without executing
   -v, --verbose       Show debug output from SSH and rsync
@@ -51,6 +53,10 @@ parse_args() {
         REMOTE_CONF="$2"
         shift 2
         ;;
+      -r|--remote-dir)
+        REMOTE_BACKUP_DIR="$2"
+        shift 2
+        ;;
       -f|--format)
         BACKUP_FORMAT="$2"
         shift 2
@@ -68,11 +74,16 @@ parse_args() {
         echo "Run '$(basename "$0") --help' for usage." >&2
         exit 1
         ;;
-      *)
+*)
         if [ -z "$SSH_USER_HOST" ]; then
           SSH_USER_HOST="$1"
         elif [ -z "$DB_NAME" ]; then
-          DB_NAME="$1"
+          # If second arg contains '/', it's a local directory path, not db_name
+          if [[ "$1" == */* ]]; then
+            LOCAL_DIR="$1"
+          else
+            DB_NAME="$1"
+          fi
         elif [ "$LOCAL_DIR" = "$(pwd)" ]; then
           LOCAL_DIR="$1"
         else
@@ -80,7 +91,6 @@ parse_args() {
           echo "Run '$(basename "$0") --help' for usage." >&2
           exit 1
         fi
-        shift
         ;;
     esac
   done
@@ -90,7 +100,7 @@ parse_args() {
 extract_db_from_hostname() {
   local host_part="${SSH_USER_HOST#*@}"
 
-  if [[ "$host_part" =~ ^([a-zA-Z0-9_-]+)\.binex\.cloud$ ]]; then
+  if [[ "$host_part" =~ ^([a-zA-Z0-9_-]+)\.binhex\.cloud$ ]]; then
     DB_NAME="${BASH_REMATCH[1]}"
   else
     DB_NAME="$host_part"
@@ -112,13 +122,14 @@ get_remote_filestore_size() {
   data_dir=$(ssh_cmd "grep -E '^\s*data_dir\s*=' $REMOTE_CONF 2>/dev/null | awk -F'=' '{print \$2}' | tr -d ' '" || true)
 
   if [ -z "$data_dir" ]; then
-    data_dir='$HOME/.local/share/Odoo'
+    # Use getent to get odoo user's home directory reliably
+    data_dir=$(ssh_cmd "getent passwd odoo | cut -d: -f6")/.local/share/Odoo
   fi
 
   local fs_path="${data_dir}/filestore/${DB_NAME}"
 
   local size_mb
-  size_mb=$(ssh_cmd "du -sm $fs_path 2>/dev/null | awk '{print \$1}'" 2>/dev/null || echo "0")
+  size_mb=$(ssh_cmd "sudo -u odoo du -sm $fs_path 2>/dev/null | awk '{print \$1}'" 2>/dev/null || echo "0")
 
   echo "$size_mb"
 }
@@ -134,9 +145,10 @@ check_remote_space() {
     estimated_mb=5120
   fi
 
-  local available_gb
-  available_gb=$(ssh_cmd "df -BG / | awk 'NR==2 {print \$4}' | tr -d 'G'" 2>/dev/null || echo "0")
-  local available_mb=$(( available_gb * 1024 ))
+  local available_kb
+  available_kb=$(ssh_cmd "df / | awk 'NR==2 {print \$4}'" 2>/dev/null || echo "0")
+  local available_gb=$(( available_kb / 1024 / 1024 ))
+  local available_mb=$(( available_kb / 1024 ))
 
   local threshold_mb=$(( estimated_mb * 3 / 2 ))
 
@@ -156,9 +168,7 @@ check_remote_space() {
 # ─── run_remote_backup ───────────────────────────────────────────────────────
 run_remote_backup() {
   local output
-  output=$(ssh_cmd "sudo -u odoo bash -s -- $DB_NAME" \
-    ODOO_CONF="$REMOTE_CONF" \
-    BACKUP_FORMAT="$BACKUP_FORMAT" \
+  output=$(ssh_cmd "sudo -u odoo env ODOO_CONF='$REMOTE_CONF' BACKUP_FORMAT='$BACKUP_FORMAT' BACKUP_DIR='$REMOTE_BACKUP_DIR' bash -s -- $DB_NAME" \
     < "$(dirname "$0")/odoo-backup.sh" 2>&1)
 
   echo "$output" | while IFS= read -r line; do
