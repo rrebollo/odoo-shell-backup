@@ -242,7 +242,7 @@ cleanup_remote() {
   local remote_file="$1"
 
   echo "[INFO] Cleaning up remote backup..."
-  if ssh_cmd "rm -f $remote_file" 2>/dev/null; then
+  if ssh_cmd "sudo -u odoo rm -f $remote_file" 2>/dev/null; then
     echo "[INFO] Remote cleanup complete."
   else
     echo "[WARN] Failed to clean up remote file: $remote_file" >&2
