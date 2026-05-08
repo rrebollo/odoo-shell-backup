@@ -6,7 +6,7 @@
 
 ## Overview
 
-Applied three minimal, targeted fixes to extend `odoo-backup.sh` compatibility down to:
+Applied three minimal, targeted fixes to extend `odoo-backup-local.sh` compatibility down to:
 - **Odoo 11** (Python 3.5+)
 - **CentOS 7** (bash 4.2)
 - **Ubuntu 14.04/16.04** (bash 4.3)
@@ -129,10 +129,10 @@ print("[PY]  ERROR: %s" % exc, file=sys.stderr)
 
 All fixes verified:
 
-- ✅ Bash syntax check: `bash -n odoo-backup.sh`
-- ✅ Help text: `bash odoo-backup.sh --help`
-- ✅ Error handling: `ODOO_CONF=/nonexistent bash odoo-backup.sh test_db`
-- ✅ Unknown flags: `bash odoo-backup.sh --foo`
+- ✅ Bash syntax check: `bash -n odoo-backup-local.sh`
+- ✅ Help text: `bash odoo-backup-local.sh --help`
+- ✅ Error handling: `ODOO_CONF=/nonexistent bash odoo-backup-local.sh test_db`
+- ✅ Unknown flags: `bash odoo-backup-local.sh --foo`
 - ✅ Python code generation: generated Python code is valid for 3.5+
 - ✅ Variable quoting: special characters in paths are properly escaped
 

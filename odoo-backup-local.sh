@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# odoo-backup.sh — Odoo backup via odoo-bin shell (compatible v11+)
+# odoo-backup-local.sh — Odoo backup via odoo-bin shell (compatible v11+)
 # Run as the same OS user that owns the Odoo service.
 set -euo pipefail
 

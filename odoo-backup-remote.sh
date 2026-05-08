@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# run-remote-backup.sh — Remote Odoo backup via SSH + rsync
+# odoo-backup-remote.sh — Remote Odoo backup via SSH + rsync
 set -euo pipefail
 
 # ─── Defaults ────────────────────────────────────────────────────────────────
@@ -182,7 +182,7 @@ run_remote_backup() {
   
   # Copy script to remote temp file and execute it to avoid stdin complications
   # This prevents issues with interactive prompts or script reading stdin
-  scp -q "$(dirname "$0")/odoo-backup.sh" "$SSH_USER_HOST:$script_file" || {
+  scp -q "$(dirname "$0")/odoo-backup-local.sh" "$SSH_USER_HOST:$script_file" || {
     echo "[ERROR] Failed to copy backup script to remote host." >&2
     return 1
   }

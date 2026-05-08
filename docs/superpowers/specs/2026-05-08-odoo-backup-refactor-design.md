@@ -1,10 +1,10 @@
-# Design: odoo-backup.sh Refactor
+# Design: odoo-backup-local.sh Refactor
 
 **Date:** 2026-05-08  
 **Status:** Approved
 
 ## Goal
-Improve `odoo-backup.sh` for cleanliness, maintainability, and clarity without adding external dependencies or changing the core backup mechanism.
+Improve `odoo-backup-local.sh` for cleanliness, maintainability, and clarity without adding external dependencies or changing the core backup mechanism.
 
 ## Approach
 Refactor into named, single-responsibility functions (Option B). `main()` orchestrates them top-to-bottom. Single file.
