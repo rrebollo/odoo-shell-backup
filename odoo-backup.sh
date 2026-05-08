@@ -131,7 +131,7 @@ run_backup() {
   echo "[INFO] Launching odoo shell ..."
 
   local pyfile
-  pyfile="$(mktemp /tmp/odoo_backup_XXXXXX.py)"
+  pyfile="$(mktemp /tmp/odoo_backup_XXXXXXXXXX.py)"
   trap 'rm -f "$pyfile"' EXIT
 
   cat > "$pyfile" <<PYEOF
