@@ -2,27 +2,45 @@
 
 Odoo backup tools — compatible v11+ via odoo-bin shell.
 
+## Installation
+
+Download scripts directly from GitHub to `~/.local/bin`:
+
+```bash
+mkdir -p ~/.local/bin
+curl -sL https://raw.githubusercontent.com/rrebollo/odoo-shell-backup/master/odoo-backup-local -o ~/.local/bin/odoo-backup-local
+curl -sL https://raw.githubusercontent.com/rrebollo/odoo-shell-backup/master/odoo-backup-remote -o ~/.local/bin/odoo-backup-remote
+chmod +x ~/.local/bin/odoo-backup-*
+```
+
+Add to PATH if needed:
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+```
+
+Update later with:
+```bash
+# Same curl commands above - just re-run to get latest version
+```
+
+## Usage
+
+Then run from anywhere:
+```bash
+odoo-backup-local <db_name> [<backup_dir>]
+odoo-backup-remote user@host [<db_name>] [<local_dir>]
+```
+
 ## Scripts
 
-### `odoo-backup-local.sh` — Local backup
-
-Run on the same host as Odoo (as the odoo user):
+If running from this repo (instead of installing):
 
 ```bash
 ./odoo-backup-local.sh <db_name> [<backup_dir>]
-./odoo-backup-local.sh --help
-```
-
-### `odoo-backup-remote.sh` — Remote backup via SSH + rsync
-
-Run from your local machine to back up a remote Odoo instance:
-
-```bash
 ./odoo-backup-remote.sh user@host [<db_name>] [<local_dir>]
-./odoo-backup-remote.sh admin@prod1.binex.cloud
-./odoo-backup-remote.sh admin@prod1.binex.cloud mydb ./backups/
-./odoo-backup-remote.sh -d admin@host mydb  # dry run
 ```
+
+Or install to PATH (see Installation above).
 
 ## Requirements
 
