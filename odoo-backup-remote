@@ -182,7 +182,7 @@ run_remote_backup() {
   
   # Copy script to remote temp file and execute it to avoid stdin complications
   # This prevents issues with interactive prompts or script reading stdin
-  scp -q "$(dirname "$0")/odoo-backup-local.sh" "$SSH_USER_HOST:$script_file" || {
+  scp -q "$(dirname "$0")/odoo-backup-local" "$SSH_USER_HOST:$script_file" || {
     echo "[ERROR] Failed to copy backup script to remote host." >&2
     return 1
   }

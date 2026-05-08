@@ -36,8 +36,8 @@ odoo-backup-remote user@host [<db_name>] [<local_dir>]
 If running from this repo (instead of installing):
 
 ```bash
-./odoo-backup-local.sh <db_name> [<backup_dir>]
-./odoo-backup-remote.sh user@host [<db_name>] [<local_dir>]
+./odoo-backup-local <db_name> [<backup_dir>]
+./odoo-backup-remote user@host [<db_name>] [<local_dir>]
 ```
 
 Or install to PATH (see Installation above).
