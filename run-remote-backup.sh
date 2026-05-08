@@ -74,9 +74,10 @@ parse_args() {
         echo "Run '$(basename "$0") --help' for usage." >&2
         exit 1
         ;;
-*)
+      *)
         if [ -z "$SSH_USER_HOST" ]; then
           SSH_USER_HOST="$1"
+          shift
         elif [ -z "$DB_NAME" ]; then
           # If second arg contains '/', it's a local directory path, not db_name
           if [[ "$1" == */* ]]; then
@@ -84,8 +85,10 @@ parse_args() {
           else
             DB_NAME="$1"
           fi
+          shift
         elif [ "$LOCAL_DIR" = "$(pwd)" ]; then
           LOCAL_DIR="$1"
+          shift
         else
           echo "[ERROR] Unexpected argument: $1" >&2
           echo "Run '$(basename "$0") --help' for usage." >&2
@@ -167,13 +170,31 @@ check_remote_space() {
 
 # ─── run_remote_backup ───────────────────────────────────────────────────────
 run_remote_backup() {
+  echo "[INFO] Starting remote backup..." >&2
+  echo "[INFO] Host     : $SSH_USER_HOST" >&2
+  echo "[INFO] Database : $DB_NAME" >&2
+  echo "[INFO] Format   : $BACKUP_FORMAT" >&2
+  echo "[INFO] Config   : $REMOTE_CONF" >&2
+  echo "" >&2
+
   local output
-  output=$(ssh_cmd "sudo -u odoo env ODOO_CONF='$REMOTE_CONF' BACKUP_FORMAT='$BACKUP_FORMAT' BACKUP_DIR='$REMOTE_BACKUP_DIR' bash -s -- $DB_NAME" \
-    < "$(dirname "$0")/odoo-backup.sh" 2>&1)
+  local script_file="/tmp/odoo-backup-$$.sh"
+  
+  # Copy script to remote temp file and execute it to avoid stdin complications
+  # This prevents issues with interactive prompts or script reading stdin
+  scp -q "$(dirname "$0")/odoo-backup.sh" "$SSH_USER_HOST:$script_file" || {
+    echo "[ERROR] Failed to copy backup script to remote host." >&2
+    return 1
+  }
+  
+  output=$(ssh_cmd "sudo -u odoo env ODOO_CONF='$REMOTE_CONF' BACKUP_FORMAT='$BACKUP_FORMAT' BACKUP_DIR='$REMOTE_BACKUP_DIR' bash $script_file $DB_NAME" 2>&1)
+  
+  # Clean up remote temp file
+  ssh_cmd "rm -f $script_file" 2>/dev/null || true
 
   echo "$output" | while IFS= read -r line; do
     if [[ "$line" == *"[INFO]"* ]] || [[ "$line" == *"[PY]"* ]]; then
-      echo "$line"
+      echo "$line" >&2
     elif [[ "$line" == *"[ERROR]"* ]]; then
       echo "$line" >&2
     fi
@@ -189,6 +210,7 @@ run_remote_backup() {
     exit 1
   fi
 
+  # Return backup file path via stdout ONLY - all logging goes to stderr
   echo "$backup_file"
 }
 
