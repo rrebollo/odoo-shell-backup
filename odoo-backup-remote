@@ -207,18 +207,16 @@ run_remote_backup() {
     return 1
   }
 
-  output=$(ssh_cmd "sudo -u odoo env ODOO_CONF='$REMOTE_CONF' BACKUP_FORMAT='$BACKUP_FORMAT' BACKUP_DIR='$REMOTE_BACKUP_DIR' bash $script_file $DB_NAME" 2>&1)
-  
+  local output_file
+  output_file=$(mktemp)
+  ssh_cmd "sudo -u odoo env ODOO_CONF='$REMOTE_CONF' BACKUP_FORMAT='$BACKUP_FORMAT' BACKUP_DIR='$REMOTE_BACKUP_DIR' bash $script_file $DB_NAME" 2>&1 | tee "$output_file"
+
   # Clean up remote temp file
   ssh_cmd "rm -f $script_file" 2>/dev/null || true
 
-  echo "$output" | while IFS= read -r line; do
-    if [[ "$line" == *"[INFO]"* ]] || [[ "$line" == *"[PY]"* ]]; then
-      echo "$line" >&2
-    elif [[ "$line" == *"[ERROR]"* ]]; then
-      echo "$line" >&2
-    fi
-  done
+  local output
+  output=$(cat "$output_file")
+  rm -f "$output_file"
 
   local backup_file
   backup_file=$(echo "$output" | grep '\[INFO\] Done:' | tail -1 | sed 's/.*Done: \([^ ]*\).*/\1/')
@@ -273,7 +271,7 @@ check_partial_download() {
 # ─── list_remote_backups ──────────────────────────────────────────────────────
 list_remote_backups() {
   local ext="$BACKUP_FORMAT"
-  ssh_cmd "sudo -u odoo ls -lhS '$REMOTE_BACKUP_DIR/${DB_NAME}*.$ext' 2>/dev/null" || true
+  ssh_cmd "sudo -u odoo find '$REMOTE_BACKUP_DIR' -maxdepth 1 -name '${DB_NAME}*.$ext' -exec ls -lhS {} + 2>/dev/null" || true
 }
 
 # ─── check_remote_backups ─────────────────────────────────────────────────────
@@ -305,7 +303,7 @@ offer_remote_cleanup() {
   local remote_dir="$1"
 
   local stale_output
-  stale_output=$(ssh_cmd "sudo -u odoo ls -lh '$remote_dir/${DB_NAME}*.$BACKUP_FORMAT' 2>/dev/null" || true)
+  stale_output=$(ssh_cmd "sudo -u odoo find '$remote_dir' -maxdepth 1 -name '${DB_NAME}*.$BACKUP_FORMAT' -exec ls -lh {} + 2>/dev/null" || true)
 
   if [ -z "$stale_output" ]; then
     return 0
@@ -318,7 +316,7 @@ offer_remote_cleanup() {
 
   read -rp "Clean them up? [y/N] " response
   if [[ "$response" == [yY]* ]]; then
-    ssh_cmd "sudo -u odoo rm -f '$remote_dir/${DB_NAME}*.$BACKUP_FORMAT'" && \
+    ssh_cmd "sudo -u odoo find '$remote_dir' -maxdepth 1 -name '${DB_NAME}*.$BACKUP_FORMAT' -exec rm -f {} + 2>/dev/null" && \
       echo "[INFO] Remote stale backups cleaned." >&2 || \
       echo "[WARN] Could not clean remote backups." >&2
   fi
