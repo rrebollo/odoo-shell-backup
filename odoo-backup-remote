@@ -234,17 +234,49 @@ run_remote_backup() {
   echo "$backup_file"
 }
 
+# ─── check_partial_download ───────────────────────────────────────────────────
+check_partial_download() {
+  mkdir -p "$LOCAL_DIR"
+
+  local partial
+  partial=$(find "$LOCAL_DIR" -maxdepth 1 -name "${DB_NAME}_*" \( -name "*.dump" -o -name "*.zip" \) -size +0 2>/dev/null | sort | tail -1)
+
+  if [ -z "$partial" ]; then
+    return 1
+  fi
+
+  local partial_size
+  partial_size=$(du -h "$partial" | awk '{print $1}')
+  echo "[INFO] Found existing download: $(basename "$partial") ($partial_size)"
+  read -rp "Resume transfer? [Y/n] " response
+  if [[ "$response" == [nN]* ]]; then
+    rm -f "$partial"
+    echo "[INFO] Removed existing file. Starting fresh."
+    return 1
+  fi
+  echo "$partial"
+}
+
 # ─── rsync_backup ─────────────────────────────────────────────────────────────
 rsync_backup() {
   local remote_file="$1"
+  local resume_file="$2"
 
   echo "[INFO] Pulling backup via rsync..."
   mkdir -p "$LOCAL_DIR"
 
+  local rsync_flags="-a --progress --partial"
+  local target="$LOCAL_DIR/"
+  if [ -n "$resume_file" ]; then
+    rsync_flags="$rsync_flags --append-verify"
+    target="$resume_file"
+    echo "[INFO] Resuming transfer (--append-verify)..."
+  fi
+
   if $VERBOSE; then
-    rsync -av --progress "$SSH_USER_HOST:$remote_file" "$LOCAL_DIR/"
+    rsync ${rsync_flags} -v "$SSH_USER_HOST:$remote_file" "$target"
   else
-    rsync -a --progress "$SSH_USER_HOST:$remote_file" "$LOCAL_DIR/"
+    rsync ${rsync_flags} "$SSH_USER_HOST:$remote_file" "$target"
   fi
 
   local exit_code=$?
@@ -305,10 +337,18 @@ main() {
     check_remote_space "$fs_size_mb"
   fi
 
-  local backup_file
-  backup_file=$(run_remote_backup)
+  local partial_file
+  partial_file=$(check_partial_download)
 
-  rsync_backup "$backup_file"
+  local backup_file
+  if [ -z "$partial_file" ]; then
+    backup_file=$(run_remote_backup)
+  else
+    echo "[INFO] Skipping remote backup, resuming download..."
+    backup_file="$REMOTE_BACKUP_DIR/$(basename "$partial_file")"
+  fi
+
+  rsync_backup "$backup_file" "$partial_file"
   cleanup_remote "$backup_file"
 
   echo ""
