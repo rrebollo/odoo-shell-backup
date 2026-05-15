@@ -201,6 +201,12 @@ run_remote_backup() {
     return 1
   }
   
+  # Ensure remote backup directory exists and is writable by odoo user
+  ssh_cmd "sudo mkdir -p '$REMOTE_BACKUP_DIR' && sudo chown odoo:odoo '$REMOTE_BACKUP_DIR'" || {
+    echo "[ERROR] Failed to prepare remote backup directory: $REMOTE_BACKUP_DIR" >&2
+    return 1
+  }
+
   output=$(ssh_cmd "sudo -u odoo env ODOO_CONF='$REMOTE_CONF' BACKUP_FORMAT='$BACKUP_FORMAT' BACKUP_DIR='$REMOTE_BACKUP_DIR' bash $script_file $DB_NAME" 2>&1)
   
   # Clean up remote temp file
