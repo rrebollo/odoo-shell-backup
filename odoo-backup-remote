@@ -247,14 +247,81 @@ check_partial_download() {
 
   local partial_size
   partial_size=$(du -h "$partial" | awk '{print $1}')
-  echo "[INFO] Found existing download: $(basename "$partial") ($partial_size)"
-  read -rp "Resume transfer? [Y/n] " response
+  echo "[INFO] Found existing local file: $(basename "$partial") ($partial_size)" >&2
+
+  local remote_path="$REMOTE_BACKUP_DIR/$(basename "$partial")"
+  local remote_size
+  remote_size=$(ssh_cmd "sudo -u odoo stat -c%s '$remote_path' 2>/dev/null" || echo "0")
+  local local_bytes
+  local_bytes=$(stat -c%s "$partial" 2>/dev/null || echo "0")
+
+  if [ "$remote_size" != "0" ] && [ "$local_bytes" = "$remote_size" ]; then
+    echo "[INFO] Local file matches remote size — backup already complete." >&2
+    echo "[INFO] Backup exists at: $LOCAL_DIR/$(basename "$partial")" >&2
+    exit 0
+  fi
+
+  read -rp "Resume download of existing file? [Y/n] " response
   if [[ "$response" == [nN]* ]]; then
     rm -f "$partial"
-    echo "[INFO] Removed existing file. Starting fresh."
+    echo "[INFO] Removed existing file, will create fresh." >&2
     return 1
   fi
   echo "$partial"
+}
+
+# ─── list_remote_backups ──────────────────────────────────────────────────────
+list_remote_backups() {
+  local ext="$BACKUP_FORMAT"
+  ssh_cmd "sudo -u odoo ls -lhS '$REMOTE_BACKUP_DIR/${DB_NAME}*.$ext' 2>/dev/null" || true
+}
+
+# ─── check_remote_backups ─────────────────────────────────────────────────────
+check_remote_backups() {
+  local remote_files
+  remote_files=$(list_remote_backups)
+
+  if [ -z "$remote_files" ]; then
+    return 1
+  fi
+
+  echo "[INFO] Found existing remote backups for '$DB_NAME':" >&2
+  echo "$remote_files" | while IFS= read -r line; do
+    echo "       $line" >&2
+  done
+
+  local latest
+  latest=$(echo "$remote_files" | head -1 | awk '{print $NF}')
+
+  read -rp "Download existing backup instead of creating a new one? [Y/n] " response
+  if [[ "$response" == [nN]* ]]; then
+    return 1
+  fi
+  echo "$latest"
+}
+
+# ─── offer_remote_cleanup ─────────────────────────────────────────────────────
+offer_remote_cleanup() {
+  local remote_dir="$1"
+
+  local stale_output
+  stale_output=$(ssh_cmd "sudo -u odoo ls -lh '$remote_dir/${DB_NAME}*.$BACKUP_FORMAT' 2>/dev/null" || true)
+
+  if [ -z "$stale_output" ]; then
+    return 0
+  fi
+
+  echo "[INFO] Stale remote backups found in $remote_dir:" >&2
+  echo "$stale_output" | while IFS= read -r line; do
+    echo "       $line" >&2
+  done
+
+  read -rp "Clean them up? [y/N] " response
+  if [[ "$response" == [yY]* ]]; then
+    ssh_cmd "sudo -u odoo rm -f '$remote_dir/${DB_NAME}*.$BACKUP_FORMAT'" && \
+      echo "[INFO] Remote stale backups cleaned." >&2 || \
+      echo "[WARN] Could not clean remote backups." >&2
+  fi
 }
 
 # ─── rsync_backup ─────────────────────────────────────────────────────────────
@@ -340,19 +407,30 @@ main() {
   local partial_file
   partial_file=$(check_partial_download)
 
-  local backup_file
-  if [ -z "$partial_file" ]; then
-    backup_file=$(run_remote_backup)
+  if [ -n "$partial_file" ]; then
+    local backup_file="$REMOTE_BACKUP_DIR/$(basename "$partial_file")"
+    rsync_backup "$backup_file" "$partial_file"
+    cleanup_remote "$backup_file"
   else
-    echo "[INFO] Skipping remote backup, resuming download..."
-    backup_file="$REMOTE_BACKUP_DIR/$(basename "$partial_file")"
+    local remote_file
+    remote_file=$(check_remote_backups)
+
+    if [ -n "$remote_file" ]; then
+      echo "[INFO] Downloading existing remote backup..." >&2
+      rsync_backup "$remote_file" ""
+      cleanup_remote "$remote_file"
+    else
+      local backup_file
+      backup_file=$(run_remote_backup)
+      rsync_backup "$backup_file" ""
+      cleanup_remote "$backup_file"
+    fi
   fi
 
-  rsync_backup "$backup_file" "$partial_file"
-  cleanup_remote "$backup_file"
+  offer_remote_cleanup "$REMOTE_BACKUP_DIR"
 
-  echo ""
-  echo "[INFO] All done. Backup saved to: $LOCAL_DIR/"
+  echo "" >&2
+  echo "[INFO] All done. Backup saved to: $LOCAL_DIR/" >&2
 }
 
 main "$@"
