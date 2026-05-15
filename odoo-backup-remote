@@ -405,7 +405,7 @@ main() {
   fi
 
   local partial_file
-  partial_file=$(check_partial_download)
+  partial_file=$(check_partial_download || true)
 
   if [ -n "$partial_file" ]; then
     local backup_file="$REMOTE_BACKUP_DIR/$(basename "$partial_file")"
@@ -413,7 +413,7 @@ main() {
     cleanup_remote "$backup_file"
   else
     local remote_file
-    remote_file=$(check_remote_backups)
+    remote_file=$(check_remote_backups || true)
 
     if [ -n "$remote_file" ]; then
       echo "[INFO] Downloading existing remote backup..." >&2
