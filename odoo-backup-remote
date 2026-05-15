@@ -110,6 +110,18 @@ extract_db_from_hostname() {
   fi
 }
 
+# ─── resolve_local_script ─────────────────────────────────────────────────────
+resolve_local_script() {
+  if command -v odoo-backup-local &>/dev/null; then
+    command -v odoo-backup-local
+  elif [ -f "$(dirname "$0")/odoo-backup-local" ]; then
+    echo "$(dirname "$0")/odoo-backup-local"
+  else
+    echo "[ERROR] odoo-backup-local not found in PATH or alongside this script." >&2
+    exit 1
+  fi
+}
+
 # ─── ssh_cmd ─────────────────────────────────────────────────────────────────
 ssh_cmd() {
   if $VERBOSE; then
@@ -182,7 +194,9 @@ run_remote_backup() {
   
   # Copy script to remote temp file and execute it to avoid stdin complications
   # This prevents issues with interactive prompts or script reading stdin
-  scp -q "$(dirname "$0")/odoo-backup-local" "$SSH_USER_HOST:$script_file" || {
+  local local_script
+  local_script=$(resolve_local_script)
+  scp -q "$local_script" "$SSH_USER_HOST:$script_file" || {
     echo "[ERROR] Failed to copy backup script to remote host." >&2
     return 1
   }
@@ -272,16 +286,18 @@ main() {
     exit 0
   fi
 
-  echo "[INFO] Estimating backup size..."
-  local fs_size_mb
-  fs_size_mb=$(get_remote_filestore_size)
-  if [ "$fs_size_mb" -gt 0 ] 2>/dev/null; then
-    echo "[INFO] Filestore size: $(( fs_size_mb / 1024 )) GB ($(( fs_size_mb % 1024 )) MB)"
-  else
-    echo "[WARN] Could not determine filestore size, using default estimate."
-  fi
+  if [ "$BACKUP_FORMAT" != "dump" ]; then
+    echo "[INFO] Estimating backup size..."
+    local fs_size_mb
+    fs_size_mb=$(get_remote_filestore_size)
+    if [ "$fs_size_mb" -gt 0 ] 2>/dev/null; then
+      echo "[INFO] Filestore size: $(( fs_size_mb / 1024 )) GB ($(( fs_size_mb % 1024 )) MB)"
+    else
+      echo "[WARN] Could not determine filestore size, using default estimate."
+    fi
 
-  check_remote_space "$fs_size_mb"
+    check_remote_space "$fs_size_mb"
+  fi
 
   local backup_file
   backup_file=$(run_remote_backup)
